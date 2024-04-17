@@ -1,0 +1,102 @@
+<html>
+<head>
+    <title>Web Notification API</title>
+</head>
+<body>
+<button id="ntfBtn" onclick="btnClick();"></button>
+<button id="clearBtn" onclick="clearBtnClick();">Clear all notifications</button>
+<p>Enable notification and then leave tab, after 5000ms a notification will appear. Remember: you need HTTPS protocol or localhost.</p>
+<div id="logs" style="overflow-y: auto;height: 300px;border: 1px solid black;padding: 10px;"></div>
+<script>
+    // logs div
+    const logs = document.getElementById("logs");
+    // notification btn
+    const btn = document.getElementById("ntfBtn");
+    // if tab is hidden/unfocused/inactive
+    let pageHidden = false;
+    // worker
+    let myWorker = null;
+    // notification timer
+    let timer = null;
+    // notification status
+    let notificationEnabled = false;
+    // write log
+    function writeLog(log) {
+        const p = document.createElement("p");
+        p.innerText = `[${new Date().toLocaleString()}]: ${log}\n----`;
+        logs.append(p);
+        logs.scrollTo(0, logs.scrollHeight);
+    }
+    // write first log
+    writeLog("Start");
+    // btn click handler
+    async function btnClick() {
+        // if already granted, disable
+        if (notificationEnabled) {
+            notificationEnabled = false;
+            writeLog("Notification disabled");
+            return btn.innerText = "Enable notification";
+        }
+        // request permission
+        const status = await Notification.requestPermission();
+        if (status === "granted") {
+            notificationEnabled = true;
+            writeLog("Notification granted");
+            btn.innerText = "Disable notification";
+        } else {
+            writeLog("Notification denied");
+            btn.setAttribute('disabled', 'disabled');
+        }
+    }
+    // clear notifications
+    function clearBtnClick() {
+        if (myWorker != null) myWorker.postMessage({type: 'clearNotifications'});
+    }
+    // add event listeners on the document for the visibilityChange event
+    document.addEventListener("visibilitychange", () => {
+        // use the document's hidden property to check if the current tab is active!
+        pageHidden = document.hidden;
+        writeLog(`Page is ${pageHidden ? "hidden" : "visible"}`);
+        if (pageHidden) {
+            if (myWorker != null) {
+                timer = setTimeout(() => {
+                    if (notificationEnabled) myWorker.postMessage({type: 'showNotification', msg: `Page is hidden`});
+                    else writeLog("Notification is disabled. No notification was displayed.")
+                    timer = null;
+                }, 5000);
+            }
+            else writeLog("I cannot show a notification because Worker is not available on your browser");
+        }
+        // if page was visible we clear timeout for notification
+        else if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+    });
+    // check if worker is available
+    if (window.Worker) {
+        myWorker = new Worker("worker.js");
+        myWorker.onmessage = (e) => {
+            if (e.data.type === "writeLog") writeLog(e.data.msg);
+        };
+    } else writeLog("Worker is not available on your browser");
+
+    if (!("Notification" in window)) {
+        writeLog("This browser does not support notifications.");
+        btn.setAttribute('disabled', 'disabled');
+        btn.innerText = "Notification not supported";
+    } else {
+        if (Notification.permission === "granted") {
+            notificationEnabled = true;
+            btn.innerText = "Disable notification";
+        } else if (Notification.permission === "denied") {
+            writeLog("Notification denied");
+            btn.innerText = "Notification denied";
+            btn.setAttribute('disabled', 'disabled');
+        } else {
+            btn.innerText = "Enable notification";
+        }
+    }
+</script>
+</body>
+</html>
